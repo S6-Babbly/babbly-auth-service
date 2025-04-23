@@ -1,0 +1,6 @@
+@babbly_auth_service_HostAddress = http://localhost:5123
+
+GET {{babbly_auth_service_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

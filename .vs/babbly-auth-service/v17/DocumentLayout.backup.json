@@ -1,0 +1,53 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\nowtu\\Documents\\git\\babbly orginisation\\babbly-auth-service\\babbly-auth-service\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{4B6AD395-2F83-4016-9F10-6B5FB917BAAC}|babbly-auth-service\\babbly-auth-service.csproj|c:\\users\\nowtu\\documents\\git\\babbly orginisation\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4B6AD395-2F83-4016-9F10-6B5FB917BAAC}|babbly-auth-service\\babbly-auth-service.csproj|solutionrelative:babbly-auth-service\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4B6AD395-2F83-4016-9F10-6B5FB917BAAC}|babbly-auth-service\\babbly-auth-service.csproj|c:\\users\\nowtu\\documents\\git\\babbly orginisation\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service.csproj||{04B8AB82-A572-4FEF-95CE-5222444B6B64}|",
+      "RelativeMoniker": "D:0:0:{4B6AD395-2F83-4016-9F10-6B5FB917BAAC}|babbly-auth-service\\babbly-auth-service.csproj|solutionrelative:babbly-auth-service\\babbly-auth-service.csproj||{04B8AB82-A572-4FEF-95CE-5222444B6B64}|"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Users\\nowtu\\Documents\\git\\babbly orginisation\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service\\Program.cs",
+              "RelativeDocumentMoniker": "babbly-auth-service\\Program.cs",
+              "ToolTip": "C:\\Users\\nowtu\\Documents\\git\\babbly orginisation\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service\\Program.cs",
+              "RelativeToolTip": "babbly-auth-service\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-04-17T16:27:42.345Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "babbly-auth-service",
+              "DocumentMoniker": "C:\\Users\\nowtu\\Documents\\git\\babbly orginisation\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service.csproj",
+              "RelativeDocumentMoniker": "babbly-auth-service\\babbly-auth-service.csproj",
+              "ToolTip": "C:\\Users\\nowtu\\Documents\\git\\babbly orginisation\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service\\babbly-auth-service.csproj",
+              "RelativeToolTip": "babbly-auth-service\\babbly-auth-service.csproj",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2025-04-17T16:27:41.023Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
