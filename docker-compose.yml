@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  auth-service:
+    build:
+      context: .
+    container_name: babbly-auth-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    ports:
+      - "5001:80"
+    networks:
+      - babbly-network
+
+networks:
+  babbly-network:
+    external: true 

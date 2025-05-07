@@ -54,9 +54,9 @@ namespace babbly_auth_service.Services
                     payload[claim.Type] = claim.Value;
                 }
                 
-                // Add token properties
-                payload["exp"] = jwtToken.ValidTo.ToUnixTimeSeconds();
-                payload["iat"] = jwtToken.IssuedAt.ToUnixTimeSeconds();
+                // Add token properties - Convert DateTime to Unix timestamp (seconds since epoch)
+                payload["exp"] = new DateTimeOffset(jwtToken.ValidTo).ToUnixTimeSeconds();
+                payload["iat"] = new DateTimeOffset(jwtToken.IssuedAt).ToUnixTimeSeconds();
                 
                 return (true, payload, null);
             }
@@ -79,6 +79,58 @@ namespace babbly_auth_service.Services
         {
             return user.FindFirst(ClaimTypes.NameIdentifier)?.Value 
                 ?? user.FindFirst("sub")?.Value;
+        }
+
+        /// <summary>
+        /// Determines if a user is authorized to access a specific resource for the given operation
+        /// </summary>
+        public async Task<bool> IsAuthorizedForResourceAsync(string userId, List<string> roles, string resourcePath, string operation)
+        {
+            _logger.LogInformation("Checking authorization for user {userId} on {resourcePath} for {operation}", 
+                userId, resourcePath, operation);
+
+            // This is where you implement your authorization logic
+            // This could involve checking roles, permissions, or other policies
+            
+            // Example implementation:
+            if (string.IsNullOrEmpty(userId))
+            {
+                _logger.LogWarning("Authorization denied: No user ID provided");
+                return false;
+            }
+            
+            // Check if user has admin role
+            if (roles.Contains("admin"))
+            {
+                _logger.LogInformation("Authorization granted: User has admin role");
+                return true;
+            }
+            
+            // Check resource-specific permissions
+            if (resourcePath.StartsWith("/users/"))
+            {
+                // Users can access their own data
+                if (resourcePath.Contains(userId))
+                {
+                    _logger.LogInformation("Authorization granted: User accessing own data");
+                    return true;
+                }
+                
+                // For write operations on user data, check if the user has appropriate role
+                if (operation == "WRITE" || operation == "DELETE")
+                {
+                    bool hasUserManagerRole = roles.Contains("user_manager");
+                    _logger.LogInformation("Authorization for write operation: {result}", 
+                        hasUserManagerRole ? "Granted" : "Denied");
+                    return hasUserManagerRole;
+                }
+            }
+            
+            // Add more resource/permission checks as needed
+            
+            // Default deny for unspecified resources/operations
+            _logger.LogWarning("Authorization denied: No matching permission rules");
+            return false;
         }
     }
 } 

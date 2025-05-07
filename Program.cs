@@ -9,8 +9,10 @@ Env.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
-builder.Services.AddScoped<TokenService>();
+builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddSingleton<KafkaProducerService>();
+builder.Services.AddHostedService<KafkaConsumerService>();
 
 builder.Services.AddControllers();
 
