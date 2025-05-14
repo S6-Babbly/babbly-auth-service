@@ -7,10 +7,12 @@ namespace babbly_auth_service.Services
     public class UserService
     {
         private readonly ILogger<UserService> _logger;
+        private readonly KafkaProducerService _kafkaProducer;
 
-        public UserService(ILogger<UserService> logger)
+        public UserService(ILogger<UserService> logger, KafkaProducerService kafkaProducer)
         {
             _logger = logger;
+            _kafkaProducer = kafkaProducer;
         }
 
         // Extract user data from a token's claims
@@ -63,21 +65,54 @@ namespace babbly_auth_service.Services
             }
         }
 
-        // Map incoming user data to a response
-        public UserResponse MapSyncRequestToResponse(SyncUserRequest request)
+        // Map incoming user data to a response and publish event to Kafka
+        public async Task<UserResponse> SyncUserAsync(SyncUserRequest request, bool isNewUser = false)
         {
-            return new UserResponse
+            try {
+                // Create user object
+                var user = new User
+                {
+                    Id = Guid.NewGuid().ToString(), // Generate new user ID
+                    Auth0Id = request.Auth0Id,
+                    Email = request.Email,
+                    Name = request.Name,
+                    Picture = request.Picture,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    EmailVerified = request.EmailVerified,
+                    Locale = request.Locale,
+                    Roles = request.Roles
+                };
+
+                // Publish event to Kafka
+                if (isNewUser)
+                {
+                    await _kafkaProducer.PublishUserCreatedEventAsync(user);
+                }
+                else
+                {
+                    await _kafkaProducer.PublishUserUpdatedEventAsync(user);
+                }
+
+                // Return user response
+                return new UserResponse
+                {
+                    Id = user.Id,
+                    Email = user.Email,
+                    Name = user.Name,
+                    Picture = user.Picture,
+                    CreatedAt = user.CreatedAt,
+                    UpdatedAt = user.UpdatedAt,
+                    EmailVerified = user.EmailVerified,
+                    Locale = user.Locale,
+                    Roles = user.Roles
+                };
+            }
+            catch (Exception ex)
             {
-                Id = request.Auth0Id,
-                Email = request.Email,
-                Name = request.Name,
-                Picture = request.Picture,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                EmailVerified = request.EmailVerified,
-                Locale = request.Locale,
-                Roles = request.Roles
-            };
+                _logger.LogError(ex, "Error syncing user");
+                throw;
+            }
         }
     }
 } 

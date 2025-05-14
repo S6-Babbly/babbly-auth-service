@@ -4,15 +4,60 @@ services:
   auth-service:
     build:
       context: .
+      dockerfile: Dockerfile
     container_name: babbly-auth-service
+    ports:
+      - "5001:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_USER_TOPIC=user-events
+    depends_on:
+      - kafka
+      - zookeeper
+    networks:
+      - babbly-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - "5001:80"
+      - "2181:2181"
+    networks:
+      - babbly-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - babbly-network
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    depends_on:
+      - kafka
+    ports:
+      - "9000:9000"
+    environment:
+      KAFKA_BROKERCONNECT: kafka:9092
+      JVM_OPTS: "-Xms32M -Xmx64M"
     networks:
       - babbly-network
 
 networks:
   babbly-network:
-    external: true 
+    driver: bridge 

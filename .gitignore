@@ -53,4 +53,28 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
+# .NET Core build folders
+bin/
+obj/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.sln.docstates
+
+# Environment files
 .env
+.env.*
+appsettings.Development.json
+appsettings.Production.json
+
+# Logs
+logs/
+
+# Docker
+.docker/
+
+# OS specific
+.DS_Store
+Thumbs.db

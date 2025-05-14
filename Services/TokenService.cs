@@ -3,6 +3,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Collections.Concurrent;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace babbly_auth_service.Services
 {
@@ -10,46 +13,113 @@ namespace babbly_auth_service.Services
     {
         private readonly IConfiguration _configuration;
         private readonly ILogger<TokenService> _logger;
+        
+        // In-memory authorization policy cache
+        private readonly ConcurrentDictionary<string, bool> _authorizationCache;
+        
+        // JWKS configuration manager for token validation
+        private readonly ConfigurationManager<OpenIdConnectConfiguration> _configurationManager;
+        
+        // Auth0 configuration
+        private readonly string _domain;
+        private readonly string _audience;
+        private readonly string _issuer;
 
         public TokenService(IConfiguration configuration, ILogger<TokenService> logger)
         {
             _configuration = configuration;
             _logger = logger;
+            _authorizationCache = new ConcurrentDictionary<string, bool>();
+            
+            // Set up Auth0 configuration
+            _domain = Environment.GetEnvironmentVariable("AUTH0_DOMAIN") ?? 
+                     configuration["Auth0:Domain"] ?? 
+                     throw new InvalidOperationException("Auth0 Domain is not configured");
+                     
+            _audience = Environment.GetEnvironmentVariable("AUTH0_AUDIENCE") ?? 
+                       configuration["Auth0:Audience"] ?? 
+                       throw new InvalidOperationException("Auth0 Audience is not configured");
+                       
+            _issuer = $"https://{_domain}/";
+                
+            // Set up JWKS discovery for Auth0
+            var metadataAddress = $"{_issuer}.well-known/openid-configuration";
+            _configurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+                metadataAddress,
+                new OpenIdConnectConfigurationRetriever(),
+                new HttpDocumentRetriever());
+                
+            // Preload the configuration
+            _ = _configurationManager.GetConfigurationAsync().ConfigureAwait(false);
         }
 
-        public (bool isValid, IDictionary<string, object>? payload, string? error) ValidateToken(string token)
+        /// <summary>
+        /// Validates a JWT token using the Auth0 JWKS
+        /// </summary>
+        public async Task<(bool isValid, ClaimsPrincipal? principal, string? error)> ValidateTokenAsync(string token)
+        {
+            try
+            {
+                var config = await _configurationManager.GetConfigurationAsync(CancellationToken.None);
+                
+                var tokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = _issuer,
+                    ValidateAudience = true,
+                    ValidAudience = _audience,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKeys = config.SigningKeys,
+                    NameClaimType = "name",
+                    RoleClaimType = "https://babbly.com/roles",
+                    ClockSkew = TimeSpan.FromMinutes(5) // Allow a 5-minute clock skew
+                };
+                
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out var validatedToken);
+                
+                return (true, principal, null);
+            }
+            catch (SecurityTokenExpiredException)
+            {
+                _logger.LogWarning("Token has expired");
+                return (false, null, "Token has expired");
+            }
+            catch (SecurityTokenInvalidSignatureException)
+            {
+                _logger.LogWarning("Token signature is invalid");
+                return (false, null, "Invalid token signature");
+            }
+            catch (SecurityTokenInvalidAudienceException)
+            {
+                _logger.LogWarning("Token audience is invalid");
+                return (false, null, "Invalid token audience");
+            }
+            catch (SecurityTokenInvalidIssuerException)
+            {
+                _logger.LogWarning("Token issuer is invalid");
+                return (false, null, "Invalid token issuer");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Token validation failed");
+                return (false, null, $"Token validation failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Gets payload from token without validation for debugging purposes
+        /// </summary>
+        public (bool isValid, IDictionary<string, object>? payload, string? error) ExtractTokenPayload(string token)
         {
             try
             {
                 var tokenHandler = new JwtSecurityTokenHandler();
-                
-                var auth0Domain = _configuration["Auth0:Domain"];
-                var audience = _configuration["Auth0:Audience"];
-
-                if (string.IsNullOrEmpty(auth0Domain) || string.IsNullOrEmpty(audience))
-                {
-                    _logger.LogError("Auth0 configuration is missing from both appsettings and environment variables");
-                    return (false, null, "Auth0 configuration is missing");
-                }
-
-                var validationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidIssuer = $"https://{auth0Domain}/",
-                    ValidateAudience = true,
-                    ValidAudience = audience,
-                    ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero,
-                    // For Auth0 JWT validation, we'd use a JwksSecurityKey in a real application
-                    // For demo purposes, we're allowing validation to pass
-                    SignatureValidator = (token, parameters) => new JwtSecurityToken(token)
-                };
-
-                var principal = tokenHandler.ValidateToken(token, validationParameters, out var validatedToken);
-                var jwtToken = (JwtSecurityToken)validatedToken;
+                var jwtToken = tokenHandler.ReadJwtToken(token);
                 
                 var payload = new Dictionary<string, object>();
-                foreach (var claim in principal.Claims)
+                foreach (var claim in jwtToken.Claims)
                 {
                     payload[claim.Type] = claim.Value;
                 }
@@ -60,18 +130,10 @@ namespace babbly_auth_service.Services
                 
                 return (true, payload, null);
             }
-            catch (SecurityTokenExpiredException)
-            {
-                return (false, null, "Token has expired");
-            }
-            catch (SecurityTokenInvalidSignatureException)
-            {
-                return (false, null, "Invalid token signature");
-            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Token validation error");
-                return (false, null, $"Token validation failed: {ex.Message}");
+                _logger.LogError(ex, "Error extracting token payload");
+                return (false, null, $"Error extracting token payload: {ex.Message}");
             }
         }
 
@@ -86,51 +148,96 @@ namespace babbly_auth_service.Services
         /// </summary>
         public async Task<bool> IsAuthorizedForResourceAsync(string userId, List<string> roles, string resourcePath, string operation)
         {
-            _logger.LogInformation("Checking authorization for user {userId} on {resourcePath} for {operation}", 
-                userId, resourcePath, operation);
-
-            // This is where you implement your authorization logic
-            // This could involve checking roles, permissions, or other policies
+            // Create a cache key
+            string cacheKey = $"{userId}:{string.Join(",", roles)}:{resourcePath}:{operation}";
             
-            // Example implementation:
-            if (string.IsNullOrEmpty(userId))
+            // Check cache first
+            if (_authorizationCache.TryGetValue(cacheKey, out bool cachedResult))
             {
-                _logger.LogWarning("Authorization denied: No user ID provided");
-                return false;
+                return cachedResult;
             }
             
-            // Check if user has admin role
-            if (roles.Contains("admin"))
-            {
-                _logger.LogInformation("Authorization granted: User has admin role");
-                return true;
-            }
+            // Implement authorization logic here
+            // This is a simple role-based authorization example
+            bool isAuthorized = false;
             
-            // Check resource-specific permissions
-            if (resourcePath.StartsWith("/users/"))
+            // Public resources that don't require authorization
+            if (resourcePath.StartsWith("/api/health") || 
+                resourcePath.StartsWith("/api/auth/health"))
             {
-                // Users can access their own data
-                if (resourcePath.Contains(userId))
+                isAuthorized = true;
+            }
+            // Admin-only resources
+            else if (resourcePath.StartsWith("/api/admin"))
+            {
+                isAuthorized = roles.Contains("admin");
+            }
+            // User resources - require authentication
+            else if (resourcePath.StartsWith("/api/users"))
+            {
+                if (operation == "GET" || operation == "POST")
                 {
-                    _logger.LogInformation("Authorization granted: User accessing own data");
-                    return true;
+                    // Anyone can GET user info or create users (for signup)
+                    isAuthorized = true;
                 }
-                
-                // For write operations on user data, check if the user has appropriate role
-                if (operation == "WRITE" || operation == "DELETE")
+                else if (resourcePath.Contains($"/api/users/{userId}"))
                 {
-                    bool hasUserManagerRole = roles.Contains("user_manager");
-                    _logger.LogInformation("Authorization for write operation: {result}", 
-                        hasUserManagerRole ? "Granted" : "Denied");
-                    return hasUserManagerRole;
+                    // Users can modify their own resources
+                    isAuthorized = true;
+                }
+                else
+                {
+                    // For other operations, require admin privileges
+                    isAuthorized = roles.Contains("admin");
+                }
+            }
+            // Post resources
+            else if (resourcePath.StartsWith("/api/posts"))
+            {
+                if (operation == "GET")
+                {
+                    // Anyone can read posts
+                    isAuthorized = true;
+                }
+                else
+                {
+                    // Must be authenticated to create/update/delete posts
+                    isAuthorized = !string.IsNullOrEmpty(userId);
+                }
+            }
+            // Comment resources
+            else if (resourcePath.StartsWith("/api/comments"))
+            {
+                if (operation == "GET")
+                {
+                    // Anyone can read comments
+                    isAuthorized = true;
+                }
+                else
+                {
+                    // Must be authenticated to create/update/delete comments
+                    isAuthorized = !string.IsNullOrEmpty(userId);
+                }
+            }
+            // Like resources
+            else if (resourcePath.StartsWith("/api/likes"))
+            {
+                if (operation == "GET")
+                {
+                    // Anyone can read likes
+                    isAuthorized = true;
+                }
+                else
+                {
+                    // Must be authenticated to create/update/delete likes
+                    isAuthorized = !string.IsNullOrEmpty(userId);
                 }
             }
             
-            // Add more resource/permission checks as needed
+            // Cache the result (with a reasonable expiration if implemented)
+            _authorizationCache.TryAdd(cacheKey, isAuthorized);
             
-            // Default deny for unspecified resources/operations
-            _logger.LogWarning("Authorization denied: No matching permission rules");
-            return false;
+            return isAuthorized;
         }
     }
 } 

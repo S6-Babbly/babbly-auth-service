@@ -1,7 +1,6 @@
+using Confluent.Kafka;
 using System.Text.Json;
 using babbly_auth_service.Models;
-using Confluent.Kafka;
-using Microsoft.Extensions.Options;
 
 namespace babbly_auth_service.Services
 {
@@ -9,43 +8,117 @@ namespace babbly_auth_service.Services
     {
         private readonly IProducer<string, string> _producer;
         private readonly ILogger<KafkaProducerService> _logger;
-        private const string AUTHORIZATION_RESPONSE_TOPIC = "auth-responses";
+        private readonly string _userTopic;
 
         public KafkaProducerService(IConfiguration configuration, ILogger<KafkaProducerService> logger)
         {
             _logger = logger;
             
-            var producerConfig = new ProducerConfig
+            // Get Kafka configuration
+            var bootstrapServers = Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS") ?? 
+                                   configuration["Kafka:BootstrapServers"] ?? 
+                                   "localhost:9092";
+                                   
+            _userTopic = Environment.GetEnvironmentVariable("KAFKA_USER_TOPIC") ?? 
+                         configuration["Kafka:UserTopic"] ?? 
+                         "user-events";
+
+            // Configure Kafka producer
+            var config = new ProducerConfig
             {
-                BootstrapServers = configuration["Kafka:BootstrapServers"] ?? Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS") ?? "localhost:9092",
-                ClientId = "babbly-auth-producer"
+                BootstrapServers = bootstrapServers,
+                ClientId = "babbly-auth-service",
+                Acks = Acks.Leader, // Wait for the leader to acknowledge the message
+                MessageSendMaxRetries = 3,
+                RetryBackoffMs = 1000, // 1 second backoff between retries
             };
 
-            _producer = new ProducerBuilder<string, string>(producerConfig).Build();
+            _producer = new ProducerBuilder<string, string>(config).Build();
             
-            _logger.LogInformation("Kafka producer initialized with bootstrap servers: {servers}", 
-                producerConfig.BootstrapServers);
+            _logger.LogInformation("Kafka producer initialized with bootstrap servers: {BootstrapServers}", bootstrapServers);
         }
 
-        public async Task ProduceAuthorizationResponseAsync(AuthMessage authMessage)
+        /// <summary>
+        /// Publishes a user created event to Kafka
+        /// </summary>
+        public async Task PublishUserCreatedEventAsync(User user)
         {
             try
             {
-                var messageJson = JsonSerializer.Serialize(authMessage);
-                var message = new Message<string, string>
+                var message = new UserCreatedEvent
                 {
-                    Key = authMessage.CorrelationId,
-                    Value = messageJson
+                    UserId = user.Id,
+                    Auth0Id = user.Auth0Id ?? string.Empty,
+                    Email = user.Email,
+                    Name = user.Name,
+                    Picture = user.Picture,
+                    CreatedAt = user.CreatedAt,
+                    EventType = "UserCreated",
+                    Timestamp = DateTime.UtcNow
                 };
 
-                var deliveryResult = await _producer.ProduceAsync(AUTHORIZATION_RESPONSE_TOPIC, message);
+                string json = JsonSerializer.Serialize(message);
                 
-                _logger.LogInformation("Authorization response delivered to {topic} [partition: {partition}, offset: {offset}]", 
+                var kafkaMessage = new Message<string, string>
+                {
+                    Key = user.Id, // Using the user ID as the message key for partitioning
+                    Value = json
+                };
+
+                // Publish message asynchronously
+                var deliveryResult = await _producer.ProduceAsync(_userTopic, kafkaMessage);
+                
+                _logger.LogInformation(
+                    "User created event published to Kafka. Topic: {Topic}, Partition: {Partition}, Offset: {Offset}",
                     deliveryResult.Topic, deliveryResult.Partition, deliveryResult.Offset);
+                    
+                return;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error producing authorization response message");
+                _logger.LogError(ex, "Error publishing user created event to Kafka");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Publishes a user updated event to Kafka
+        /// </summary>
+        public async Task PublishUserUpdatedEventAsync(User user)
+        {
+            try
+            {
+                var message = new UserUpdatedEvent
+                {
+                    UserId = user.Id,
+                    Auth0Id = user.Auth0Id ?? string.Empty,
+                    Email = user.Email,
+                    Name = user.Name,
+                    Picture = user.Picture,
+                    UpdatedAt = user.UpdatedAt,
+                    EventType = "UserUpdated",
+                    Timestamp = DateTime.UtcNow
+                };
+
+                string json = JsonSerializer.Serialize(message);
+                
+                var kafkaMessage = new Message<string, string>
+                {
+                    Key = user.Id,
+                    Value = json
+                };
+
+                var deliveryResult = await _producer.ProduceAsync(_userTopic, kafkaMessage);
+                
+                _logger.LogInformation(
+                    "User updated event published to Kafka. Topic: {Topic}, Partition: {Partition}, Offset: {Offset}",
+                    deliveryResult.Topic, deliveryResult.Partition, deliveryResult.Offset);
+                    
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error publishing user updated event to Kafka");
                 throw;
             }
         }
