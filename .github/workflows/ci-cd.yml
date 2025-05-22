@@ -50,7 +50,6 @@ jobs:
             -Dsonar.organization=babblyisgeweldig
             -Dsonar.sources=.
             -Dsonar.exclusions=**/node_modules/**,**/bin/**,**/obj/**,**/*.test.js,**/*.spec.js
-            -Dsonar.cs.opencover.reportsPaths=**/coverage.opencover.xml
           
   backend-tests:
     name: Backend Tests
@@ -64,13 +63,13 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Restore dependencies
-        run: dotnet restore ./babbly-auth-service.sln
+        run: dotnet restore ./babbly-auth-service.csproj
 
       - name: Build
-        run: dotnet build ./babbly-auth-service.sln --no-restore
+        run: dotnet build ./babbly-auth-service.csproj --no-restore
 
       - name: Test
-        run: dotnet test ./babbly-auth-service.sln --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test ./babbly-auth-service.csproj --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
 
   docker-build-and-push:
     name: Docker Build and Push to Docker Hub
