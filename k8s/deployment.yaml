@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  labels:
+    app: auth-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+      - name: auth-service
+        image: babbly-auth-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Development"
+        - name: AUTH0_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: auth0-secrets
+              key: AUTH0_DOMAIN
+        - name: AUTH0_AUDIENCE
+          valueFrom:
+            secretKeyRef:
+              name: auth0-secrets
+              key: AUTH0_AUDIENCE
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: KAFKA_USER_TOPIC
+          value: "user-events"
+        - name: KAFKA_AUTH_TOPIC
+          value: "auth-events" 
