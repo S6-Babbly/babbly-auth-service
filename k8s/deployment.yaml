@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: auth-service
-        image: babbly-auth-service:latest
+        image: morrishh/babbly-auth-service:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
